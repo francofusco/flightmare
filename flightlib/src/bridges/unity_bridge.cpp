@@ -105,18 +105,21 @@ bool UnityBridge::handleSettings(void) {
 };
 
 bool UnityBridge::getRender(const FrameID frame_id) {
+
   pub_msg_.frame_id = frame_id;
   QuadState quad_state;
   for (size_t idx = 0; idx < pub_msg_.vehicles.size(); idx++) {
     unity_quadrotors_[idx]->getState(&quad_state);
     pub_msg_.vehicles[idx].position = positionRos2Unity(quad_state.p);
     pub_msg_.vehicles[idx].rotation = quaternionRos2Unity(quad_state.q());
+    pub_msg_.vehicles[idx].size = scalarRos2Unity(unity_quadrotors_[idx]->getSize());
   }
 
   for (size_t idx = 0; idx < pub_msg_.objects.size(); idx++) {
-    std::shared_ptr<StaticObject> gate = static_objects_[idx];
-    pub_msg_.objects[idx].position = positionRos2Unity(gate->getPosition());
-    pub_msg_.objects[idx].rotation = quaternionRos2Unity(gate->getQuaternion());
+    std::shared_ptr<StaticObject> obj = static_objects_[idx];
+    pub_msg_.objects[idx].position = positionRos2Unity(obj->getPosition());
+    pub_msg_.objects[idx].rotation = quaternionRos2Unity(obj->getQuaternion());
+    pub_msg_.objects[idx].size = scalarRos2Unity(obj->getSize());
   }
 
   // create new message object
@@ -128,6 +131,18 @@ bool UnityBridge::getRender(const FrameID frame_id) {
   msg << json_msg.dump();
   // send message without blocking
   pub_.send(msg, true);
+
+  // remove the objects here
+  if(del_msg_.objects.size() > 0) {
+    del_msg_.frame_id = frame_id;
+    zmqpp::message del_msg;
+    del_msg << "Delete";
+    json json_del_msg = del_msg_;
+    del_msg << json_del_msg.dump();
+    pub_.send(del_msg); // WARNING: this is blocking
+    del_msg_.objects.clear();
+  }
+
   return true;
 }
 
@@ -195,6 +210,33 @@ bool UnityBridge::addStaticObject(std::shared_ptr<StaticObject> static_object) {
   settings_.objects.push_back(object_t);
   pub_msg_.objects.push_back(object_t);
   //
+  return true;
+}
+
+bool UnityBridge::removeStaticObject(const std::string& id) {
+  // look for the object
+  auto obj_it = std::find_if(
+    static_objects_.begin(),
+    static_objects_.end(),
+    [&](const auto& o) { return o->getID() == id; }
+  );
+
+  // make sure the iterator is valid
+  if(obj_it == static_objects_.end())
+    return false;
+
+  // index of the object (not really, but almost)
+  auto idx = std::distance(static_objects_.begin(), obj_it);
+  // iterators to the objects to remove in pub_msg_ and settings_
+  auto pub_msg_it = pub_msg_.objects.begin() + idx;
+  auto settings_it = settings_.objects.begin() + idx;
+  // add the object to the list of objects to remove
+  del_msg_.objects.push_back(*pub_msg_it);
+  // remove any reference to the object
+  static_objects_.erase(obj_it);
+  pub_msg_.objects.erase(pub_msg_it);
+  settings_.objects.erase(settings_it);
+  // ok, we did our job
   return true;
 }
 

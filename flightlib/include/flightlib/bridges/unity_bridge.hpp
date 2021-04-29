@@ -57,6 +57,9 @@ class UnityBridge {
   bool addCamera(std::shared_ptr<UnityCamera> unity_camera);
   bool addStaticObject(std::shared_ptr<StaticObject> static_object);
 
+  // remove added objects
+  bool removeStaticObject(const std::string& id);
+
   // public auxiliary functions
   inline void setPubPort(const std::string &pub_port) { pub_port_ = pub_port; };
   inline void setSubPort(const std::string &sub_port) { sub_port_ = sub_port; };
@@ -73,6 +76,7 @@ class UnityBridge {
   //
   SettingsMessage_t settings_;
   PubMessage_t pub_msg_;
+  PubMessage_t del_msg_;
   Logger logger_{"UnityBridge"};
 
   std::vector<std::shared_ptr<Quadrotor>> unity_quadrotors_;
